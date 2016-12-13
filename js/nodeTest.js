@@ -252,7 +252,7 @@ var dataManager = function() {
     this.data = tateData;
     this.numItems = this.data.length;
     this.accessKey = process.env.GRAPH_COMMONS_API_KEY;
-    this.graph_id = "97cf12fe-8d23-471b-bf02-4275b3ce7fca";
+    this.graph_id = "78407ab7-7655-4cc6-a91e-4542b2269dc6";
 
     //Init
     this.init = function() {
@@ -260,8 +260,8 @@ var dataManager = function() {
     };
 
     //Links
-    var linkNames = ["Made by", "Inspired by", "In opposition to", "In response to", "Associated / works with", "Exhibited with", "Exhibited at"];
-    var numLinkNames = linkNames.length;
+    var linkTypes = ["Made by", "Inspired by", "In opposition to", "In response to", "Associated / works with", "Exhibited with", "Exhibited at"];
+    var numLinkTypes = linkTypes.length;
     var links = {
         "Made by" : [],
         "Inspired by" : [],
@@ -297,11 +297,14 @@ var dataManager = function() {
 
     this.preSort = function() {
         //Remove whitespace from fields
-        var i, dataItem, key;
+        var i, dataItem, key, attribute;
         for(i=0; i<this.numItems; ++i) {
             dataItem = this.data[i];
             for(key in dataItem) {
-                dataItem.key = dataItem.key.trim();
+                attribute = dataItem[key];
+                if(typeof attribute === 'string' && attribute !== "" && attribute !== null) {
+                    dataItem[key] = attribute.trim();
+                }
             }
         }
     };
@@ -310,9 +313,9 @@ var dataManager = function() {
         var i, j, dataItem;
         for(i=0; i<this.numItems; ++i) {
             dataItem = this.data[i];
-            for(j=0; j<numLinkNames; ++j) {
-                if(dataItem[linkNames[j]]) {
-                    links[linkNames[j]].push(dataItem[linkNames[j]]);
+            for(j=0; j<numLinkTypes; ++j) {
+                if(dataItem[linkTypes[j]]) {
+                    links[linkTypes[j]].push(dataItem[linkTypes[j]]);
                 }
             }
         }
@@ -340,6 +343,42 @@ var dataManager = function() {
         this.graphcommons.update_graph(this.graph_id, signalNode, function() {
             console.log("Node ", name, " created");
         });
+    };
+
+    this.createEdges = function() {
+        var i, j, dataItem, linkInfo;
+        for (i = 0; i < this.numItems; ++i) {
+            dataItem = this.data[i];
+            for(j=0; j<numLinkTypes; ++j) {
+                linkInfo = this.getLinkInfo(dataItem, linkType[j]);
+                if(linkInfo !== null) {
+                    this.createGraphEdge(dataItem["Type of node"], dataItem["Node short name"], linkInfo);
+                }
+            }
+        }
+    };
+
+    this.getLinkInfo = function(data, linkType) {
+        if(!data[linkType]) return null;
+
+        var name = data[linkType];
+        var type = this.getType(name);
+        if(!type) return null;
+
+        var linkInfo = {
+            "name": name,
+            "type": type
+        };
+
+        return linkInfo;
+    };
+
+    this.getType = function(name) {
+        //Search link arrays for this name
+        var i;
+        for(i=0; i<numLinkTypes; ++i) {
+
+        }
     }
 };
 
