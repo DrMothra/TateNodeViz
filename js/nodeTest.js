@@ -252,7 +252,9 @@ var dataManager = function() {
     this.data = tateData;
     this.numItems = this.data.length;
     this.accessKey = process.env.GRAPH_COMMONS_API_KEY;
-    this.graph_id = "78407ab7-7655-4cc6-a91e-4542b2269dc6";
+    this.graph_id = "288bd5c8-f7e1-4bf4-945b-4a65bdfc749a";
+    this.nodesToCreate = 0;
+    this.nodesCreated = 0;
 
     //Init
     this.init = function() {
@@ -271,6 +273,10 @@ var dataManager = function() {
         "Exhibited with" : [],
         "Exhibited at" : []
     };
+
+    //Types - just artists for now
+    var artists = [];
+
     var signalNode = {
         "signals": [
             {
@@ -306,7 +312,16 @@ var dataManager = function() {
                     dataItem[key] = attribute.trim();
                 }
             }
+            if(dataItem["Type of node"]) {
+                ++this.nodesToCreate;
+            }
+            //DEBUG
+            if(dataItem["Exhibited at"]) {
+                console.log(dataItem["Exhibited at"]);
+            }
         }
+        //DEBUG
+        console.log("Need to create ", this.nodesToCreate, " nodes");
     };
 
     this.sortLinks = function() {
@@ -317,6 +332,16 @@ var dataManager = function() {
                 if(dataItem[linkTypes[j]]) {
                     links[linkTypes[j]].push(dataItem[linkTypes[j]]);
                 }
+            }
+        }
+    };
+
+    this.sortArtists = function() {
+        var i, dataItem;
+        for(i=0; i<this.numItems; ++i) {
+            dataItem = this.data[i];
+            if(dataItem["Type of node"] === "Artists") {
+                artists.push(dataItem["Node short name"]);
             }
         }
     };
@@ -340,45 +365,92 @@ var dataManager = function() {
         signalNode.signals[0].type = type;
         signalNode.signals[0].name = name;
         signalNode.signals[0].description = description;
+        var _this = this;
         this.graphcommons.update_graph(this.graph_id, signalNode, function() {
             console.log("Node ", name, " created");
+            if(--_this.nodesToCreate === 0) {
+                _this.createEdges();
+            }
         });
     };
 
     this.createEdges = function() {
-        var i, j, dataItem, linkInfo;
+        var i, j, k, dataItem, linkInfo, numLinks;
         for (i = 0; i < this.numItems; ++i) {
             dataItem = this.data[i];
             for(j=0; j<numLinkTypes; ++j) {
-                linkInfo = this.getLinkInfo(dataItem, linkType[j]);
+                linkInfo = this.getLinkInfo(dataItem, linkTypes[j]);
                 if(linkInfo !== null) {
-                    this.createGraphEdge(dataItem["Type of node"], dataItem["Node short name"], linkInfo);
+                    for(k=0, numLinks=linkInfo.length; k<numLinks; ++k) {
+                        this.createGraphEdge(dataItem["Type of node"], dataItem["Node short name"], linkInfo[k].type, linkInfo[k].name, linkTypes[j]);
+                    }
                 }
             }
         }
+    };
+
+    this.createGraphEdge = function(fromType, fromName, toType, toName, edgeName) {
+        //Create edge
+        signalEdge.signals[0].from_type = fromType;
+        signalEdge.signals[0].from_name = fromName;
+        signalEdge.signals[0].to_type = toType;
+        signalEdge.signals[0].to_name = toName;
+        signalEdge.signals[0].name = edgeName;
+        this.graphcommons.update_graph(this.graph_id, signalEdge, function() {
+            console.log("Edge ", edgeName, " created");
+        })
     };
 
     this.getLinkInfo = function(data, linkType) {
         if(!data[linkType]) return null;
 
         var name = data[linkType];
-        var type = this.getType(name);
-        if(!type) return null;
+        var entries = [];
+        entries.push(name);
+        //Check for multiple names
+        var i, type;
+        var link, linkInfo=[];
+        if(name.indexOf(',') >=0) {
+            entries = name.split(",");
+            for(i=0; i<entries.length; ++i) {
+                entries[i] = entries[i].trim();
+            }
+        }
 
-        var linkInfo = {
-            "name": name,
-            "type": type
-        };
+        var numEntries = entries.length;
+        for(i=0; i<numEntries; ++i) {
+            type = this.getType(entries[i]);
+            if(!type) return null;
+            link = {
+                "name": entries[i],
+                "type": type
+            };
+            linkInfo.push(link);
+        }
 
         return linkInfo;
     };
 
     this.getType = function(name) {
-        //Search link arrays for this name
-        var i;
-        for(i=0; i<numLinkTypes; ++i) {
-
+        //Search type arrays for this name
+        //Only check artist arrays for now
+        var i, numArtists=artists.length;
+        for(i=0; i<numArtists; ++i) {
+            if(name === artists[i]) {
+                return "Artists";
+            }
         }
+
+        //Not an artist - search everything else
+        var dataItem;
+        for(i=0; i<this.numItems; ++i) {
+            dataItem = this.data[i];
+            if(name === dataItem["Node short name"]) {
+                return dataItem["Type of node"];
+            }
+        }
+
+        return null;
     }
 };
 
@@ -393,6 +465,8 @@ var manager = new dataManager();
 manager.init();
 manager.preSort();
 manager.sortLinks();
+manager.sortArtists();
 manager.createNodes();
+//manager.createEdges();
 //manager.displayLinks("Associated / works with");
 
